@@ -3,38 +3,106 @@ package src;
 import java.util.concurrent.Semaphore;
 
 /**
- * Processus fourni par l'énoncé.
+ * Broker managing the message queue between publishers and subscribers.
+ * Implements the BROKER4 process from FSP specification.
  *
+ * FSP Specification:
  * BROKER4 = PUBSUB[0],
  *   PUBSUB[i:0..N] = (when (i < N) connect_pub -> pub -> queue -> PUBSUB[i + 1]
  *                   | when (i > 0) connect_sub -> sub -> dequeue -> PUBSUB[i - 1]).
+ *
+ * The broker uses two semaphores to control synchronization:
+ * - slots: Controls the number of available slots for publishers (initialized to N)
+ * - messages: Controls the number of available messages for subscribers (initialized to 0)
+ *
+ * Invariant: 0 <= currentMessages <= N
  */
-
 public class Broker {
-    //nb_publications
-    private final Semaphore nb_publications;
-    //nb_subscriptions
-    private final Semaphore nb_subscriptions;
+    private final int capacity;
+    private final Semaphore slots;      // Available slots for publishers (max N)
+    private final Semaphore messages;   // Available messages for subscribers
+    private final Object lock = new Object();
+    private int currentMessages = 0;
 
-    public Broker(int n) {
-        this.nb_publications = new Semaphore(n);
-        this.nb_subscriptions  = new Semaphore(0);
+    /**
+     * Creates a broker with specified capacity.
+     * @param capacity Maximum number of concurrent messages (N in FSP)
+     */
+    public Broker(int capacity) {
+        this.capacity = capacity;
+        this.slots = new Semaphore(capacity, true);  // Fair semaphore
+        this.messages = new Semaphore(0, true);      // Fair semaphore
     }
 
-    //fonction du sémaphore pour acquérir la ressource et notifier les autres threads
-    //de l'utilisation de ce dernier
-    //Dans notre énoncé et le cas de publisher, c'est lorsqu'on se connecte et publie.
-    public void connectAndPublish() throws InterruptedException {
-        nb_publications.acquire();
-        nb_subscriptions.release();
+    /**
+     * Publisher connects to the broker (action connect_pub).
+     * Blocks if the broker is full (i >= N).
+     * @throws InterruptedException if thread is interrupted
+     */
+    public void connectPublisher() throws InterruptedException {
+        slots.acquire();  // Wait for available slot (i < N)
     }
 
-    //fonction du sémaphore pour acquérir la ressource et notifier les autres threads
-    //de l'utilisation de ce dernier
-    //Dans notre énoncé et le cas de subscriber, c'est lorsqu'on se connecte et suscribe.
-    //on fait juste l contraire de publish
-    public void connectAndSubscribe() throws InterruptedException {
-        nb_subscriptions.acquire();
-        nb_publications.release();
+    /**
+     * Publisher publishes a message (action pub).
+     * Increments the message count and notifies waiting subscribers.
+     */
+    public void publish() {
+        synchronized (lock) {
+            currentMessages++;
+        }
+        messages.release();  // Signal message available (i + 1)
+    }
+
+    /**
+     * Publisher closes connection (implicit action).
+     */
+    public void closePublisher() {
+        // Connection closed, no action needed
+    }
+
+    /**
+     * Subscriber connects to the broker (action connect_sub).
+     * Blocks if no messages are available (i == 0).
+     * @throws InterruptedException if thread is interrupted
+     */
+    public void connectSubscriber() throws InterruptedException {
+        messages.acquire();  // Wait for available message (i > 0)
+    }
+
+    /**
+     * Subscriber receives a message (action sub).
+     * Decrements the message count and frees a slot for publishers.
+     */
+    public void subscribe() {
+        synchronized (lock) {
+            currentMessages--;
+        }
+        slots.release();  // Free slot for publishers (i - 1)
+    }
+
+    /**
+     * Subscriber closes connection (implicit action).
+     */
+    public void closeSubscriber() {
+        // Connection closed, no action needed
+    }
+
+    /**
+     * Returns the current number of messages in the broker.
+     * @return current message count
+     */
+    public int getCurrentMessages() {
+        synchronized (lock) {
+            return currentMessages;
+        }
+    }
+
+    /**
+     * Returns the broker capacity.
+     * @return maximum capacity
+     */
+    public int getCapacity() {
+        return capacity;
     }
 }

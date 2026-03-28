@@ -1,40 +1,77 @@
 package src;
 
+import java.util.Random;
+
 /**
- * Processus PUB de l'énoncé
- * PUB3 = (supply -> connect_pub -> pub -> close_pub -> PUB3).
+ * Publisher thread that implements the PUB3 process from FSP specification.
+ *
+ * FSP Specification:
+ * PUB3 = (supply -> connect_pub -> pub -> PUB3).
+ *
+ * Cycle: SUPPLY -> CONNECT_PUB -> PUB -> CLOSE_PUB -> (repeat)
+ *
+ * The publisher generates messages (SUPPLY), connects to the broker,
+ * publishes the message, and closes the connection.
  */
-public class Publisher implements Runnable {
-    private final String name;
+public class Publisher extends Thread {
     private final Broker broker;
-    private boolean running = true;
+    private final String appType;
+    private final int id;
+    private final long endTime;
+    private final Random random;
+    private volatile boolean running = true;
 
-    public Publisher(String application, int id, Broker broker) {
-        this.name = application + ".publisher." + id;
+    /**
+     * Creates a new Publisher.
+     *
+     * @param appType  Application type (i or t)
+     * @param id       Publisher identifier
+     * @param broker   The broker to publish to
+     * @param endTime  Time when execution should stop
+     */
+    public Publisher(String appType, int id, Broker broker, long endTime) {
         this.broker = broker;
+        this.appType = appType;
+        this.id = id;
+        this.endTime = endTime;
+        this.random = new Random();
+        this.setName(appType + ".publisher." + id);
     }
 
-    //arret du thread en cours
-    public void stop() {
+    /**
+     * Stops the publisher gracefully.
+     */
+    public void stopPublisher() {
         running = false;
+        this.interrupt();
     }
 
-    //ici c'est simple, on met le nom devant comme dans la trace d'exemple on supply d'abord
-    //puis on lock le thread avec le sémaphore donc il effectue son action
-    //empechant les autres d'avoir accés à la ressource en meme temps
-    //on ferme ensuite le semaphore pour qu'il libere la ressource ( on le print juste ici, voir main pour fermeture)
-    //l'exception nous permet de bloquer l'éxécution automatique apres un certain temps
     @Override
     public void run() {
         try {
-            while (running) {
-                System.out.println(name + " SUPPLY");
-                broker.connectAndPublish();
-                synchronized (System.out) {
-                    System.out.println(name + " CONNECT_PUB");
-                    System.out.println(name + " PUB");
-                    System.out.println(name + " CLOSE_PUB");
-                }
+            while (running && System.currentTimeMillis() < endTime) {
+                // Action SUPPLY: Generate a message
+                Thread.sleep(random.nextInt(50) + 10);
+                if (!running || System.currentTimeMillis() >= endTime) break;
+                TraceManager.trace(appType, "publisher", id, "SUPPLY");
+
+                // Action CONNECT_PUB: Connect to broker
+                if (!running || System.currentTimeMillis() >= endTime) break;
+                TraceManager.trace(appType, "publisher", id, "CONNECT_PUB");
+                broker.connectPublisher();
+
+                // Action PUB: Publish the message
+                if (!running || System.currentTimeMillis() >= endTime) break;
+                TraceManager.trace(appType, "publisher", id, "PUB");
+                broker.publish();
+
+                // Action CLOSE_PUB: Close connection
+                if (!running || System.currentTimeMillis() >= endTime) break;
+                TraceManager.trace(appType, "publisher", id, "CLOSE_PUB");
+                broker.closePublisher();
+
+                // Small pause before next cycle
+                Thread.sleep(random.nextInt(30) + 5);
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

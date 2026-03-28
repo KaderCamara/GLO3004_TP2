@@ -4,76 +4,107 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Paramètres:
- *   -Dn=<int>: Nb messages simultanés (N)
- *   -Dp=<int>: Nb publishers (NB_P)
- *   -Ds=<int>: Nb subscribers (NB_S)
- *   -Dt=<int>: durée d'exécution en millisecondes
- * Exemple donné:
+ * Main class for the Publisher-Subscriber system.
+ * Manages the startup and shutdown of the system based on provided parameters.
+ *
+ * System Parameters:
+ *   -Dn=<int>: Number of concurrent messages in broker (N in FSP)
+ *   -Dp=<int>: Number of publishers per application type (NB_P in FSP)
+ *   -Ds=<int>: Number of subscribers per application type (NB_S in FSP)
+ *   -Dt=<int>: Execution duration in milliseconds
+ *
+ * Example:
  *   java -Dn=2 -Dp=2 -Ds=3 -Dt=100 -jar tp2.jar
+ *
+ * FSP System:
+ * - Two application types: i and t
+ * - Total publishers: 2 × NB_P (NB_P of type i + NB_P of type t)
+ * - Total subscribers: 2 × NB_S (NB_S of type i + NB_S of type t)
+ * - All actors share a single global broker
  */
 public class Main {
-    //on a 2 types d'applications ici
-    private static final String[] APPLICATIONS = {"i", "t"};
+    private static final String[] APPLICATION_TYPES = {"i", "t"};
 
-    public static void main(String[] args) throws InterruptedException {
-        //Initialisation de nos listes pour la suite.
-        List<Publisher>  publishers  = new ArrayList<>();
+    public static void main(String[] args) {
+        // Parse system properties with default values
+        int n = Integer.parseInt(System.getProperty("n", "2"));
+        int p = Integer.parseInt(System.getProperty("p", "2"));
+        int s = Integer.parseInt(System.getProperty("s", "3"));
+        int t = Integer.parseInt(System.getProperty("t", "100"));
+
+        // Validate parameters
+        if (n < 1 || p < 1 || s < 1 || t < 1) {
+            System.err.println("Error: All parameters must be positive");
+            System.err.println("Usage: java -Dn=<capacity> -Dp=<publishers> -Ds=<subscribers> -Dt=<duration> -jar tp2.jar");
+            System.exit(1);
+        }
+
+        // Create single global broker (shared by all applications)
+        // This is the key improvement: one broker for the entire system
+        Broker broker = new Broker(n);
+
+        // Calculate end time
+        long endTime = System.currentTimeMillis() + t;
+
+        // Lists to store publishers and subscribers
+        List<Publisher> publishers = new ArrayList<>();
         List<Subscriber> subscribers = new ArrayList<>();
-        List<Thread>     threads     = new ArrayList<>();
-        //parametres avec valeurs par défaut
-        int n  = Integer.parseInt(System.getProperty("n", "2"));
-        int nbP = Integer.parseInt(System.getProperty("p", "2"));
-        int nbS = Integer.parseInt(System.getProperty("s", "3"));
-        int t  = Integer.parseInt(System.getProperty("t", "1000"));
 
-        //AFFICHAGE TRACE
-        System.out.println("N = " + n + " NB_P = " + nbP + " NB_S = " + nbS + " t = " + t + " ms");
-        System.out.println("Trace : ");
-        System.out.println(" ");
-
-        //Pour pas avoir de chauvechement chaque application a son broker
-        // on crée ensuite nous publishers et subscribers qu'on sauvegarde.
-        //on leur attribue chacun son thread ( le but de l'exercice qui est l'éxécution simultanée
-        //de plusieurs threads ) comme quand chacun se connecte sur son facebook ( indépendant )
-        for (String application : APPLICATIONS) {
-            Broker broker = new Broker(n);
-            for (int id = 1; id <= nbP; id++) {
-                Publisher pub = new Publisher(application, id, broker);
-                publishers.add(pub);
-                Thread thread = new Thread(pub, application + ".publisher." + id);
-                threads.add(thread);
+        // Create publishers and subscribers for both application types
+        // Each type has p publishers and s subscribers
+        for (String appType : APPLICATION_TYPES) {
+            // Create publishers for this application type
+            for (int id = 1; id <= p; id++) {
+                Publisher publisher = new Publisher(appType, id, broker, endTime);
+                publishers.add(publisher);
             }
-            for (int id = 1; id <= nbS; id++) {
-                Subscriber sub = new Subscriber(application, id, broker);
-                subscribers.add(sub);
-                Thread thread = new Thread(sub, application + ".subscriber." + id);
-                threads.add(thread);
+            // Create subscribers for this application type
+            for (int id = 1; id <= s; id++) {
+                Subscriber subscriber = new Subscriber(appType, id, broker, endTime);
+                subscribers.add(subscriber);
             }
         }
 
-        //on lance l'éxécution du systeme pubsub
-        for (Thread thread : threads) {
-            thread.start();
-        }
-        // on met le timer qui va arrêter tout après
-        Thread.sleep(t);
-
-        //Apres exécution on s'assure de tout fermer correctement
-        //on arrete manuellement avec notre fonction nos publishers et suscribers
-        for (Publisher pub : publishers)   pub.stop();
-        for (Subscriber sub : subscribers) sub.stop();
-        // on arrete nos threads
-        for (Thread thread : threads) {
-            thread.interrupt();
+        // Start all publishers
+        for (Publisher publisher : publishers) {
+            publisher.start();
         }
 
-        // On joint tous les threads pour attendre l'éxécution de tous ceux qui avaient été démarrés
-        //TRES IMPORTANT COMME ON A PU L'APPRENDRE DANS LE COURS QUI EN PARLAIT AVEC LEXEMPLE DU PONT ET DES VOITURES
-        for (Thread thread : threads) {
-            //on a mis 2 fois le temps d'éxécution
-            thread.join(2L *t);
+        // Start all subscribers
+        for (Subscriber subscriber : subscribers) {
+            subscriber.start();
         }
-        System.out.println("Simulation terminée après " + t + "ms.");
+
+        // Wait for the execution duration
+        try {
+            Thread.sleep(t);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+
+        // Stop all publishers
+        for (Publisher publisher : publishers) {
+            publisher.stopPublisher();
+        }
+
+        // Stop all subscribers
+        for (Subscriber subscriber : subscribers) {
+            subscriber.stopSubscriber();
+        }
+
+        // Wait for all threads to finish
+        try {
+            for (Publisher publisher : publishers) {
+                publisher.join(1000);
+            }
+            for (Subscriber subscriber : subscribers) {
+                subscriber.join(1000);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+
+        // Exit cleanly
+        System.exit(0);
     }
 }
