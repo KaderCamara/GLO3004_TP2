@@ -1,45 +1,190 @@
-README FILE DE NOTRE MINI SYSTEME / APPLICATION
+================================================================================
+                    SYSTÈME PUBLISHER-SUBSCRIBER
+                         GLO-3004 - TP2
+================================================================================
 
-COMMENT FAIRE:
-Ouvrir votre terminal et faire selon la situation:
-
-SITUATION 1:
-  déjà éxécuté les commandes une fois faire cela d'abord pour supprimer le dossier out:
-  Remove-Item -Recurse -Force out
-  Remove-Item -Recurse -Force MANIFEST.MF
-  Remove-Item -Recurse -Force tp2.jar
-
-SITUATION 2:
-    copier-coller ces commandes :
-      mkdir -p out
-      javac -d out ./*.java
-      "Main-Class: src.Main`n" | Out-File -FilePath MANIFEST.MF -Encoding ascii -NoNewline
-      jar cfm tp2.jar MANIFEST.MF -C out .
-      java -Dn=2 -Dp=2 -Ds=3 -Dt=100 -jar tp2.jar
-
-SITUATION 3:
-      si comme certains membres de l'équipe votre java est sur oracle et que vous avez votre
-      jar.exe dans un autre dossier que javac donc ca vous affiche une erreur comme quoi
-      jar est introuvable ? faire ceci:
-      Allez dans ce dossier et vérifier :
-      "C:\Program Files\Java\jdk-21.0.10\bin\jar.exe" sinon faire commande (on va l'appeler COM)
-      Get-ChildItem -Path "C:\Program Files" -Recurse -Filter "jar.exe" -ErrorAction SilentlyContinue | Select-Object FullName
-      si vous ne le trouvez pas et cela vous affichera un chemin. ce qui donne en tout:
-
-      copier-coller ces commandes :
-      mkdir -p out
-      javac -d out ./src/*.java
-      "Main-Class: src.Main`n" | Out-File -FilePath MANIFEST.MF -Encoding ascii -NoNewline
-      & "C:\Program Files\Java\jdk-21.0.10\bin\jar.exe" cfm tp2.jar MANIFEST.MF -C out .
-      ou  & "chemin trouvé par la commande COM plus haute" cfm tp2.jar MANIFEST.MF -C out .
-      java -Dn=2 -Dp=2 -Ds=3 -Dt=100 -jar tp2.jar
+TABLE DES MATIÈRES
+------------------
+1. Comment exécuter le jar
+2. Comment interpréter les sorties
+3. Comment chaque processus de la spécification est implémenté
 
 
+================================================================================
+1. COMMENT EXÉCUTER LE JAR
+================================================================================
+
+Commande de base :
+
+    java -Dn=2 -Dp=2 -Ds=3 -Dt=100 -jar tp2.jar
 
 
+Paramètres :
+    -Dn  : Capacité du broker (N dans FSP)
+    -Dp  : Nombre de publishers par type d'application (NB_P dans FSP)
+    -Ds  : Nombre de subscribers par type d'application (NB_S dans FSP)
+    -Dt  : Durée d'exécution en millisecondes
+
+Exemples :
+    java -Dn=1 -Dp=1 -Ds=1 -Dt=200 -jar tp2.jar
+    java -Dn=5 -Dp=3 -Ds=4 -Dt=500 -jar tp2.jar
+
+Note : Le système a deux types d'applications (i et t), donc avec p=2 et s=3,
+on aura 4 publishers (2 de type i + 2 de type t) et 6 subscribers au total.
 
 
+================================================================================
+2. COMMENT INTERPRÉTER LES SORTIES
+================================================================================
+
+2.1 FORMAT
+----------
+Les traces suivent le format : appType.actorType.id ACTION
+
+Exemple : i.publisher.2 SUPPLY
+    - i : type d'application
+    - publisher : type d'acteur
+    - 2 : identifiant
+    - SUPPLY : action
 
 
+2.2 ACTIONS DES PUBLISHERS
+---------------------------
+Cycle : SUPPLY → CONNECT_PUB → PUB → CLOSE_PUB → (recommence)
+
+    SUPPLY       : Génération d'un message
+    CONNECT_PUB  : Connexion au broker (peut bloquer si broker plein)
+    PUB          : Publication du message
+    CLOSE_PUB    : Fermeture de la connexion
 
 
+2.3 ACTIONS DES SUBSCRIBERS
+----------------------------
+Cycle : CONNECT_SUB → SUB → CLOSE_SUB → CONSUME → (recommence)
+
+    CONNECT_SUB  : Connexion au broker (peut bloquer si aucun message)
+    SUB          : Réception du message
+    CLOSE_SUB    : Fermeture de la connexion
+    CONSUME      : Traitement du message
+
+
+2.4 EXEMPLE DE TRACE
+--------------------
+    i.publisher.2 SUPPLY
+    i.publisher.2 CONNECT_PUB
+    i.publisher.2 PUB
+    i.publisher.2 CLOSE_PUB
+    t.subscriber.1 CONNECT_SUB
+    t.subscriber.1 SUB
+    t.subscriber.1 CLOSE_SUB
+    t.subscriber.1 CONSUME
+
+Les actions de différents acteurs peuvent s'entrelacer car ils s'exécutent
+en parallèle.
+
+
+================================================================================
+3. IMPLÉMENTATION DES PROCESSUS
+================================================================================
+
+3.1 PUBLISHER (PUB3)
+--------------------
+Spécification FSP :
+    PUB3 = (supply -> connect_pub -> pub -> PUB3).
+
+Implémentation :
+    - Thread Java (classe Publisher qui hérite de Thread)
+    - Boucle infinie dans la méthode run()
+    - Appelle les méthodes du broker pour publier
+
+Actions :
+    supply      → Thread.sleep() puis affichage de la trace
+    connect_pub → broker.connectPublisher() (bloque si i >= N)
+    pub         → broker.publish()
+    (implicite) → broker.closePublisher()
+
+
+3.2 SUBSCRIBER (SUB3)
+---------------------
+Spécification FSP :
+    SUB3 = (connect_sub -> sub -> consume -> SUB3).
+
+Implémentation :
+    - Thread Java (classe Subscriber qui hérite de Thread)
+    - Boucle infinie dans la méthode run()
+    - Appelle les méthodes du broker pour recevoir
+
+Actions :
+    connect_sub → broker.connectSubscriber() (bloque si i == 0)
+    sub         → broker.subscribe()
+    (implicite) → broker.closeSubscriber()
+    consume     → Thread.sleep() puis affichage de la trace
+
+
+3.3 BROKER (BROKER4)
+--------------------
+Spécification FSP :
+    BROKER4 = PUBSUB[0],
+    PUBSUB[i:0..N] = (when (i < N) connect_pub -> pub -> queue -> PUBSUB[i+1]
+                     |when (i > 0) connect_sub -> sub -> dequeue -> PUBSUB[i-1]).
+
+Implémentation :
+    - Moniteur (classe Broker, objet partagé)
+    - Deux sémaphores pour la synchronisation
+    - Variable currentMessages qui compte les messages dans le broker
+
+Sémaphores utilisés :
+    slots    : Initialisé à N, compte les places disponibles
+    messages : Initialisé à 0, compte les messages disponibles
+
+Fonctionnement :
+    - connectPublisher() fait acquire() sur slots (bloque si plein)
+    - publish() incrémente currentMessages et fait release() sur messages
+    - connectSubscriber() fait acquire() sur messages (bloque si vide)
+    - subscribe() décrémente currentMessages et fait release() sur slots
+
+Les sémaphores sont équitables (fair=true) pour éviter la famine.
+
+
+3.4 MAIN
+--------
+Spécification FSP :
+    ||SYSTEM11 = (forall [app:AppType]
+                    (forall [i:1..NB_P] app.pub[i]:PUB3
+                    |forall [i:1..NB_S] app.sub[i]:SUB3
+                    )
+                 ||BROKER4
+                 ).
+
+Implémentation :
+    - Crée un broker global partagé
+    - Crée les publishers et subscribers pour les types i et t
+    - Lance tous les threads
+    - Attend la durée spécifiée
+    - Arrête proprement tous les threads
+
+
+3.5 TRACEMANAGER
+----------------
+Classe utilitaire pour afficher les traces de façon synchronisée.
+Utilise un Object lock pour éviter que les lignes ne se mélangent
+quand plusieurs threads écrivent en même temps.
+
+
+RÉSUMÉ
+------
+    Threads (entités actives) :
+        - Publisher
+        - Subscriber
+
+    Moniteurs (entités passives) :
+        - Broker (synchronisé avec sémaphores)
+
+    Synchronisation :
+        - Sémaphores équitables
+        - synchronized pour les variables partagées
+        - Flags volatile pour arrêter les threads
+
+================================================================================
+FIN
+================================================================================
