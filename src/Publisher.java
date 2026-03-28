@@ -8,10 +8,10 @@ import java.util.Random;
  * FSP Specification:
  * PUB3 = (supply -> connect_pub -> pub -> PUB3).
  *
- * Cycle: SUPPLY -> CONNECT_PUB -> PUB -> CLOSE_PUB -> (repeat)
+ * Cycle: SUPPLY -> CONNECT_PUB -> PUB -> (repeat)
  *
  * The publisher generates messages (SUPPLY), connects to the broker,
- * publishes the message, and closes the connection.
+ * and publishes the message.
  */
 public class Publisher extends Thread {
     private final Broker broker;
@@ -64,11 +64,6 @@ public class Publisher extends Thread {
                 if (!running || System.currentTimeMillis() >= endTime) break;
                 TraceManager.trace(appType, "publisher", id, "PUB");
                 broker.publish();
-
-                // Action CLOSE_PUB: Close connection
-                if (!running || System.currentTimeMillis() >= endTime) break;
-                TraceManager.trace(appType, "publisher", id, "CLOSE_PUB");
-                broker.closePublisher();
 
                 // Small pause before next cycle
                 Thread.sleep(random.nextInt(30) + 5);

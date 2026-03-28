@@ -50,21 +50,19 @@ Exemple : i.publisher.2 SUPPLY
 
 2.2 ACTIONS DES PUBLISHERS
 ---------------------------
-Cycle : SUPPLY → CONNECT_PUB → PUB → CLOSE_PUB → (recommence)
+Cycle : SUPPLY → CONNECT_PUB → PUB → (recommence)
 
     SUPPLY       : Génération d'un message
     CONNECT_PUB  : Connexion au broker (peut bloquer si broker plein)
     PUB          : Publication du message
-    CLOSE_PUB    : Fermeture de la connexion
 
 
 2.3 ACTIONS DES SUBSCRIBERS
 ----------------------------
-Cycle : CONNECT_SUB → SUB → CLOSE_SUB → CONSUME → (recommence)
+Cycle : CONNECT_SUB → SUB → CONSUME → (recommence)
 
     CONNECT_SUB  : Connexion au broker (peut bloquer si aucun message)
     SUB          : Réception du message
-    CLOSE_SUB    : Fermeture de la connexion
     CONSUME      : Traitement du message
 
 
@@ -73,10 +71,8 @@ Cycle : CONNECT_SUB → SUB → CLOSE_SUB → CONSUME → (recommence)
     i.publisher.2 SUPPLY
     i.publisher.2 CONNECT_PUB
     i.publisher.2 PUB
-    i.publisher.2 CLOSE_PUB
     t.subscriber.1 CONNECT_SUB
     t.subscriber.1 SUB
-    t.subscriber.1 CLOSE_SUB
     t.subscriber.1 CONSUME
 
 Les actions de différents acteurs peuvent s'entrelacer car ils s'exécutent
@@ -101,7 +97,6 @@ Actions :
     supply      → Thread.sleep() puis affichage de la trace
     connect_pub → broker.connectPublisher() (bloque si i >= N)
     pub         → broker.publish()
-    (implicite) → broker.closePublisher()
 
 
 3.2 SUBSCRIBER (SUB3)
@@ -117,7 +112,6 @@ Implémentation :
 Actions :
     connect_sub → broker.connectSubscriber() (bloque si i == 0)
     sub         → broker.subscribe()
-    (implicite) → broker.closeSubscriber()
     consume     → Thread.sleep() puis affichage de la trace
 
 
@@ -131,7 +125,6 @@ Spécification FSP :
 Implémentation :
     - Moniteur (classe Broker, objet partagé)
     - Deux sémaphores pour la synchronisation
-    - Variable currentMessages qui compte les messages dans le broker
 
 Sémaphores utilisés :
     slots    : Initialisé à N, compte les places disponibles
@@ -139,9 +132,9 @@ Sémaphores utilisés :
 
 Fonctionnement :
     - connectPublisher() fait acquire() sur slots (bloque si plein)
-    - publish() incrémente currentMessages et fait release() sur messages
+    - publish() fait release() sur messages
     - connectSubscriber() fait acquire() sur messages (bloque si vide)
-    - subscribe() décrémente currentMessages et fait release() sur slots
+    - subscribe() fait release() sur slots
 
 Les sémaphores sont équitables (fair=true) pour éviter la famine.
 

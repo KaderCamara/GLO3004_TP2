@@ -8,10 +8,10 @@ import java.util.Random;
  * FSP Specification:
  * SUB3 = (connect_sub -> sub -> consume -> SUB3).
  *
- * Cycle: CONNECT_SUB -> SUB -> CLOSE_SUB -> CONSUME -> (repeat)
+ * Cycle: CONNECT_SUB -> SUB -> CONSUME -> (repeat)
  *
  * The subscriber connects to the broker, receives a message,
- * closes the connection, and consumes the message.
+ * and consumes the message.
  */
 public class Subscriber extends Thread {
     private final Broker broker;
@@ -59,11 +59,6 @@ public class Subscriber extends Thread {
                 if (!running || System.currentTimeMillis() >= endTime) break;
                 TraceManager.trace(appType, "subscriber", id, "SUB");
                 broker.subscribe();
-
-                // Action CLOSE_SUB: Close connection
-                if (!running || System.currentTimeMillis() >= endTime) break;
-                TraceManager.trace(appType, "subscriber", id, "CLOSE_SUB");
-                broker.closeSubscriber();
 
                 // Action CONSUME: Consume the message
                 Thread.sleep(random.nextInt(50) + 20);

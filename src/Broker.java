@@ -21,8 +21,6 @@ public class Broker {
     private final int capacity;
     private final Semaphore slots;      // Available slots for publishers (max N)
     private final Semaphore messages;   // Available messages for subscribers
-    private final Object lock = new Object();
-    private int currentMessages = 0;
 
     /**
      * Creates a broker with specified capacity.
@@ -48,17 +46,7 @@ public class Broker {
      * Increments the message count and notifies waiting subscribers.
      */
     public void publish() {
-        synchronized (lock) {
-            currentMessages++;
-        }
         messages.release();  // Signal message available (i + 1)
-    }
-
-    /**
-     * Publisher closes connection (implicit action).
-     */
-    public void closePublisher() {
-        // Connection closed, no action needed
     }
 
     /**
@@ -75,27 +63,7 @@ public class Broker {
      * Decrements the message count and frees a slot for publishers.
      */
     public void subscribe() {
-        synchronized (lock) {
-            currentMessages--;
-        }
         slots.release();  // Free slot for publishers (i - 1)
-    }
-
-    /**
-     * Subscriber closes connection (implicit action).
-     */
-    public void closeSubscriber() {
-        // Connection closed, no action needed
-    }
-
-    /**
-     * Returns the current number of messages in the broker.
-     * @return current message count
-     */
-    public int getCurrentMessages() {
-        synchronized (lock) {
-            return currentMessages;
-        }
     }
 
     /**
