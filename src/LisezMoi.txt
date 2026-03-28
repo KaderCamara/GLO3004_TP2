@@ -1,0 +1,45 @@
+README FILE DE NOTRE MINI SYSTEME / APPLICATION
+
+COMMENT FAIRE:
+Ouvrir votre terminal et faire selon la situation:
+
+SITUATION 1:
+  déjà éxécuté les commandes une fois faire cela d'abord pour supprimer le dossier out:
+  Remove-Item -Recurse -Force out
+  Remove-Item -Recurse -Force MANIFEST.MF
+  Remove-Item -Recurse -Force tp2.jar
+
+SITUATION 2:
+    copier-coller ces commandes :
+      mkdir -p out
+      javac -d out ./*.java
+      "Main-Class: src.Main`n" | Out-File -FilePath MANIFEST.MF -Encoding ascii -NoNewline
+      jar cfm tp2.jar MANIFEST.MF -C out .
+      java -Dn=2 -Dp=2 -Ds=3 -Dt=100 -jar tp2.jar
+
+SITUATION 3:
+      si comme certains membres de l'équipe votre java est sur oracle et que vous avez votre
+      jar.exe dans un autre dossier que javac donc ca vous affiche une erreur comme quoi
+      jar est introuvable ? faire ceci:
+      Allez dans ce dossier et vérifier :
+      "C:\Program Files\Java\jdk-21.0.10\bin\jar.exe" sinon faire commande (on va l'appeler COM)
+      Get-ChildItem -Path "C:\Program Files" -Recurse -Filter "jar.exe" -ErrorAction SilentlyContinue | Select-Object FullName
+      si vous ne le trouvez pas et cela vous affichera un chemin. ce qui donne en tout:
+
+      copier-coller ces commandes :
+      mkdir -p out
+      javac -d out ./src/*.java
+      "Main-Class: src.Main`n" | Out-File -FilePath MANIFEST.MF -Encoding ascii -NoNewline
+      & "C:\Program Files\Java\jdk-21.0.10\bin\jar.exe" cfm tp2.jar MANIFEST.MF -C out .
+      ou  & "chemin trouvé par la commande COM plus haute" cfm tp2.jar MANIFEST.MF -C out .
+      java -Dn=2 -Dp=2 -Ds=3 -Dt=100 -jar tp2.jar
+
+
+
+
+
+
+
+
+
+
